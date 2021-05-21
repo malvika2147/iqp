@@ -12,9 +12,9 @@ void cnot(const Vector &a, Vector &b) {
 }
 
 bool check_zero(const Vector &a){
-   bit ans=0;
-   for(int i = 0; i < a.size(); ++i) ans |= a[i];
-   return (!ans);
+    bit ans=0;
+    for(int i = 0; i < a.size(); ++i) ans |= a[i];
+    return (!ans);
 }
 
 Matrix rref(const Matrix &A){
@@ -57,26 +57,46 @@ Matrix rref(const Matrix &A){
     return M;
 }
 
-Vector sample_from_null(const Matrix &A, std::function<bit()> &coin) {
-
+int rnk(const Matrix &A) {
     Matrix M = rref(A);
 
     int m = M.size();
     assert(m); 
     int n = M[0].size();
-    vector<bool> lead(n, false);
 
-    Vector sample(n);
-    Vector cur(m,0);
-    
     int rank=0;
     for(int i = 0,j=0; i < m; ++i,++j) {
         while(j < n && !M[i][j]) ++j;
         if(j >= n) break;
-
-        lead[j] = 1;
         ++rank;
     } 
+
+    return rank;
+}
+
+
+vector<bool> get_pivots(const Matrix &M){
+    int m = M.size();
+    int n = M[0].size();
+
+    vector<bool> lead(n, false);
+    for(int i = 0,j=0; i < m; ++i,++j) {
+        while(j < n && !M[i][j]) ++j;
+        if(j >= n) break;
+        lead[j] = 1;
+    }
+    
+    return lead;
+}
+
+// takes matrix in rref form and solves system of eq
+Vector get_random_solution(const Matrix &M, const Vector &y, std::function<bit()> &coin ){
+    int m = M.size();
+    int n = M[0].size();
+
+    vector<bool> lead = get_pivots(M);
+    Vector sample(n);
+    Vector cur(m,0);
 
     // fix the free variables
     for(int j = 0; j < n; ++j){
@@ -84,23 +104,126 @@ Vector sample_from_null(const Matrix &A, std::function<bit()> &coin) {
             continue;
         }
         sample[j] = coin();
-        // add sample[j] * column[j] tp the answer
+        // add sample[j] * column[j] to the answer
         for(int i = 0; i < m; ++i) cur[i] ^= (sample[j]&M[i][j]);
     }
-
-    // calculate the other variables
+    // calculate the other variables, we want cur to equal to y1
     for(int j =0,k=0 ;j < n; ++j){
         if(!lead[j]) continue;
-        sample[j] = cur[k++];
+        sample[j] = (cur[k]^y[k]);
+        ++k;
 
         // add sample[j] *column[j] to answer
         for(int i = 0; i < m; ++i) cur[i] ^= (sample[j]&M[i][j]);
     }
 
-    for(int i = 0; i < m; ++i) assert(!cur[i]); 
+    // check answer wrt rref
+    for(int i = 0; i < m; ++i) assert(cur[i] == y[i]); 
+
 
     return sample;
 }
+
+Vector sample_from_null(const Matrix &A, std::function<bit()> &coin) {
+
+    Matrix M = rref(A);
+
+    int m = M.size();
+    assert(m); 
+    int n = M[0].size();
+
+    Vector y(m,0);
+
+    Vector sample = get_random_solution(M,y,coin);
+   // if(check_zero(sample)) cerr << "Warning: zero sample\n";
+    return sample;
+}
+
+// only works if a solution exists otherwise assertion will fail
+Vector sample_from_solutions(const Matrix &A, const Vector &y, std::function<bit()> &coin){
+    Matrix M = A;
+
+    int m = M.size();
+    assert(m); 
+    int n = M[0].size();
+    
+    // Append y as a column to M to perform rref on both
+    for(int i = 0; i < m; ++i) M[i].push_back(y[i]);
+    M = rref(M);
+
+    // Remove the last column of M, then we need to solve for Mx = y1
+    Vector y1(m);
+    for(int i = 0; i < m; ++i ){
+        y1[i] = M[i].back();
+        M[i].pop_back();
+    }
+
+    Vector sample = get_random_solution(M,y1,coin);
+    // check answer wrt original matrix
+    Vector check = mul(A,sample);
+    assert(check.size() == y.size());
+    for(int i = 0; i < m; ++i) assert(check[i] == y[i]);
+
+    return sample;
+}
+
+// returns all the solutions to Ax=0
+Matrix get_entire_null(const Matrix &A){
+    Matrix M = rref(A);
+
+    int m = M.size();
+    assert(m); 
+    int n = M[0].size();
+
+    vector<bool> lead = get_pivots(M);
+
+    // count how many free variables
+    int free = 0;
+    for(int j = 0; j < n; ++j) free += (!lead[j]);
+    
+    // not too many free solutions
+    assert(free < 30);
+    Matrix solutions;
+
+    solutions.resize(1<<free);
+    // all possibilities for free variables
+    for(int mask = 0; mask < (1<<free); ++mask){
+        // fix the free variables
+        Vector sample(n);
+        Vector cur(m,0);
+        for(int j = 0, k=0; j < n; ++j){
+            if(lead[j]) {
+                continue;
+            }
+            // value of jth variable is determined by mask
+            sample[j] = !!(mask&(1<<k));
+            ++k;
+            // add sample[j] * column[j] to the answer
+            for(int i = 0; i < m; ++i) cur[i] ^= (sample[j]&M[i][j]);
+        }
+
+        // calculate the other variables, we want cur to equal to y1
+        for(int j =0,k=0 ;j < n; ++j){
+            if(!lead[j]) continue;
+            sample[j] = cur[k];
+            ++k;
+            // add sample[j] *column[j] to answer
+            for(int i = 0; i < m; ++i) cur[i] ^= (sample[j]&M[i][j]);
+        }
+
+        // check answer wrt rref
+        assert(check_zero(cur));
+    
+        // check answer wrt original matrix
+        Vector check = mul(A,sample);
+        assert(check_zero(check));
+
+        solutions[mask] = sample;
+    }
+
+    return solutions;
+}
+
 
 Vector mul(const Matrix &M, const Vector &v){
 
@@ -115,17 +238,37 @@ Vector mul(const Matrix &M, const Vector &v){
     return out;
 }
 
+Matrix mul(const Matrix &A, const Matrix &B){
+   int m1,n,m2;
+   
+   m1 = A.size();
+   n = A[0].size();
+   assert(B.size() == n);
+   m2 = B[0].size();
+   Matrix C(m1);
+   for(int i = 0; i < m1; ++i) C[i].resize(m2);
+
+   for(int i = 0; i < m1; ++i){
+     for(int j = 0; j < m2; ++j){
+        C[i][j] =0;
+        for(int k = 0; k < n; ++k) C[i][j] ^= (A[i][k]&B[k][j]);
+      }
+    }
+    
+    return C;
+}
+
 Matrix transpose(const Matrix &A){
     int n,m;
     m = A.size();
     assert(m);
     n = A[0].size();
     Matrix T(n);
- 
+
     for(int i = 0; i < n; ++i){
         T[i].resize(m);
         for(int j = 0; j < m; ++j){
-           T[i][j] = A[j][i]; 
+            T[i][j] = A[j][i]; 
         }
     }
 

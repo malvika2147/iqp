@@ -12,12 +12,21 @@ typedef std::vector<bit> Vector;
 
 void cnot(const Vector &a, Vector &b);
 Matrix rref(const Matrix &A);
+int rnk(const Matrix &A);
 
 // Return random vector from null space
 Vector sample_from_null(const Matrix &A, std::function<bit()> &coin);
+// Return a random solution to the system of linear equations Ax=y
+Vector sample_from_solutions(const Matrix &A, const Vector &y, std::function<bit()> &coin);
+
+// Get all vectors from null space
+Matrix get_entire_null(const Matrix &A);
 
 // Compute Mv 
 Vector mul(const Matrix &M, const Vector &v);
+// Matrix multiplication
+Matrix mul(const Matrix &A, const Matrix &B);
+
 // Compute dot product
 bit dot(const Vector &a, const Vector &b); 
 // Check if 0 vector
