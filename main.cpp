@@ -276,6 +276,35 @@ void check_prover_samples(int g, int ns, const Matrix &P, function<bit()> &coin)
 }
 
 
+long long estimate_search_space(const Matrix &P, function<bit()> &coin){
+    int m = P.size();
+    int n = P[0].size();
+    
+    Vector s(n, 0);
+    s[0]=1;
+    // total number of strings tried
+    long long tries =0;   
+    int attempts = 0;
+    while(1) {
+        attempts++;
+        Matrix Q = get_samplesg1_basis(P, coin);
+        int r = rnk(Q);
+
+        tries += 1ll<<(n-r);
+
+        int all_orth = 1;
+        for(int i = 0; i < Q.size(); ++i){
+            all_orth &= !dot(Q[i],s);
+        }
+
+        // s lies in null of Q
+        if(all_orth) break;
+    }
+    
+    cout << attempts << ", ";
+    return tries;
+}
+
 int find_secret_1(const Matrix &P, function<bit()> &coin){
     int m = P.size();
     int n = P[0].size();
@@ -357,14 +386,14 @@ int find_secret_1(const Matrix &P, function<bit()> &coin){
 
 void run_iqp_protocol(int g, function<bit()> &coin){
 
-    int n = 50, m = 70;
-//    cin >> m >> n;
+    int n = 50, m = 10;
+    cin >> m >> n;
     Matrix P = create_P(g,m,n,coin);
     //print(P);
-     check_prover_samples(g,m*m, P, coin);
+    // check_prover_samples(g,m*m, P, coin);
     if(g == 1){ 
-       // int tries = find_secret_1(P,coin);
-        //cout << tries <<"\n";
+        auto tries = estimate_search_space(P,coin);
+        cout << tries <<"\n";
     }
 }
 
@@ -389,8 +418,8 @@ int main(){
     //test_sample_from_null(100,50,coin); 
    // test_sample_from_solutions(300,1000,coin); 
 
-    //run_iqp_protocol(1,coin);
+    run_iqp_protocol(1,coin);
 
-    random_P_rank(coin);
+    //random_P_rank(coin);
     return 0;
 }
