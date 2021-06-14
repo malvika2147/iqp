@@ -6,6 +6,9 @@
 #include <chrono>
 #include "matrix.h"
 
+#define DETAILED 
+#define OUTPUT_RANK 
+
 using namespace std;
 
 void test_sample_from_null(int m, int n, function<bit()> &coin) {
@@ -285,12 +288,15 @@ long long estimate_search_space(const Matrix &P, function<bit()> &coin){
     // total number of strings tried
     long long tries =0;   
     int attempts = 0;
+
+    int rnkP = rnk(P);
+
     while(1) {
         attempts++;
         Matrix Q = get_samplesg1_basis(P, coin);
         int r = rnk(Q);
 
-        tries += 1ll<<(n-r);
+        tries += 1ll<<(rnkP-r);
 
         int all_orth = 1;
         for(int i = 0; i < Q.size(); ++i){
@@ -305,22 +311,75 @@ long long estimate_search_space(const Matrix &P, function<bit()> &coin){
     return tries;
 }
 
+Matrix reduce_column(const Matrix &P){
+   Matrix T = rref(transpose(P));
+
+   while(!T.empty() && check_zero(T.back())){
+    T.pop_back();
+   }
+   
+   #ifdef OUTPUT_RANK
+   cout << rnk(T) << ", " << T.size() << "\n";
+   #endif
+   return transpose(T);
+}
+
+// check that scrambled s is correct for a scrambled P
+bool check_secret_1(const Matrix &P, const Vector &s){
+    // check that first m_s rows are orthogonal to s
+    int m = P.size(); 
+    int m_s = m/2;
+    if(!(m_s&1)) --m_s;
+    
+    // first m_s rows are non orthogonal to s
+    bool ret = true;
+    int c1=0,c2=0;
+    for(int i = 0; i < m_s; ++i){
+        if(dot(P[i],s) == 0) ret = false, ++c1; 
+    }
+
+    // last m-m_s rows are orthogonal to s
+    for(int i = m_s; i < m; ++i){
+        if(dot(P[i],s) == 1) ret = false, ++c2;
+    } 
+
+    if(!ret) {
+        cout << "wrong at " << c1 << "/" << m_s << " "  << c2 << "/" << m-m_s << "  positions\n";
+    
+        for(int i = 0; i < m; ++i) {
+            if(dot(P[i],s)==1) print(P[i]);
+        }
+    }
+
+    printf("\n");
+
+    return ret;
+}
+
 int find_secret_1(const Matrix &P, function<bit()> &coin){
     int m = P.size();
     int n = P[0].size();
-    int attempts = m*m;
+    int attempts = max(m*m,500);
     
     if(rnk(P) != n) {
         cout << "-1, ";
         return 0;
     }
 
+    cout << "RATIO " << " " << n*1.0/m << "\n";
+    
     Vector s(n, 0);
     s[0]=1;
     // total number of strings tried
     int tries =0;
     while(attempts--) {
         Matrix Q = get_samplesg1_basis(P, coin);
+        
+        for(int k = 0; (1<<(1<<k)) < m; ++k){
+            Matrix Q2 = get_samplesg1_basis(P, coin);
+            for(int i =0 ; i < Q2.size(); ++i) Q.emplace_back(Q2[i]);
+        }
+
         int r = rnk(Q);
         // assume all of Q is orthogonal to S.
         #ifdef DETAILED
@@ -333,14 +392,6 @@ int find_secret_1(const Matrix &P, function<bit()> &coin){
             continue;
         }
         
-        int orth = 0;
-        for(int i = 0; i < Q.size(); ++i){
-            orth += !dot(Q[i],s);
-        }
-        #ifdef DETAILED
-        cout << "samples: " << Q.size() << " orth: " << orth << "\n";
-        #endif
-
         Matrix trial = get_entire_null(Q);
         
         #ifdef DETAILED
@@ -359,13 +410,13 @@ int find_secret_1(const Matrix &P, function<bit()> &coin){
                 #ifdef DETAILED
                 cout << "Found\n";
                 #endif
-                --trial[i][0];
-                
-                if(!check_zero(trial[i])) {
+               
+                if(!check_secret_1(P,trial[i])) {
                    #ifdef DETAILED
                    cout << "Warning: wrong string\n";
                    #endif
                    cout << "2, ";
+                   continue;
                 } else {
                    cout << 0 <<", ";
                 }
@@ -386,15 +437,25 @@ int find_secret_1(const Matrix &P, function<bit()> &coin){
 
 void run_iqp_protocol(int g, function<bit()> &coin){
 
-    int n = 50, m = 10;
+    int n = 50, m = 50;
     cin >> m >> n;
     Matrix P = create_P(g,m,n,coin);
-    //print(P);
+
+    vector<string> S;
+    for(int i = 0; i < m; ++i) S.push_back(to_string(P[i]));
+    for(int i = 0; i < m; ++i) for(int j = i+1; j < m; ++j) {
+        if(S[i] == S[j]) {
+            cout << S[i] << "\n" << S[j] << "\n\n";
+        }
+    }
+    
+    Matrix R = reduce_column(P);
     // check_prover_samples(g,m*m, P, coin);
-    if(g == 1){ 
-        auto tries = estimate_search_space(P,coin);
+     if(g == 1){ 
+       auto tries = find_secret_1(R,coin);
         cout << tries <<"\n";
     }
+
 }
 
 // rank of P^TP for a random P
