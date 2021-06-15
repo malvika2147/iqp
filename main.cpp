@@ -7,7 +7,7 @@
 #include "matrix.h"
 
 #define DETAILED 
-#define OUTPUT_RANK 
+#define OUTPUT_RANK
 
 using namespace std;
 
@@ -157,7 +157,7 @@ Matrix create_P(int g, int m, int n, function<bit()> &coin){
     }
 
 #ifdef OUTPUT_RANK
-    cout << rnk(P) <<  ", ";
+    cout << rnk(R) <<  ", " << rnk(P) << ", ";
 #endif
     return P;
 }
@@ -356,6 +356,17 @@ bool check_secret_1(const Matrix &P, const Vector &s){
     return ret;
 }
 
+Matrix generate_Q1(const Matrix &P, function<bit()> &coin, int maxk){
+    Matrix Q = get_samplesg1_basis(P, coin);
+        
+    for(int k = 1; k < maxk; ++k){
+        Matrix Q2 = get_samplesg1_basis(P, coin);
+        for(int i =0 ; i < Q2.size(); ++i) Q.emplace_back(Q2[i]);
+    }
+    
+    return Q;
+}
+
 int find_secret_1(const Matrix &P, function<bit()> &coin){
     int m = P.size();
     int n = P[0].size();
@@ -450,12 +461,18 @@ void run_iqp_protocol(int g, function<bit()> &coin){
     }
     
     Matrix R = reduce_column(P);
-    // check_prover_samples(g,m*m, P, coin);
-     if(g == 1){ 
-       auto tries = find_secret_1(R,coin);
-        cout << tries <<"\n";
-    }
+   // int r = rnk(P);
+   // for(int k = 1; k <= 10; ++k){
 
+   //     Matrix Q = generate_Q1(R,coin,k);
+   //     cout << r-rnk(Q) << ", ";
+   // }
+   // cout << r << "\n";
+    // check_prover_samples(g,m*m, P, coin);
+    // if(g == 1){ 
+    //   auto tries = find_secret_1(R,coin);
+    //    cout << tries <<"\n";
+    //}
 }
 
 // rank of P^TP for a random P
